@@ -11,11 +11,7 @@ some threshold) and write that.
 import sys
 import argparse
 import pysam
-import re
-import pandas as pd
-from matplotlib import pyplot as plt
 from itertools import product
-from collections import defaultdict
 
 from common import parse_fasta
 
@@ -114,6 +110,24 @@ def verify_alignment_bounds(aln_pair, fa_dict, perf_primer_len=30):
         return (aln_bounds[0] < perf_primer_len) and (aln_bounds[1] > len(amplicon) - perf_primer_len)
     else:
         return False
+    
+def fill_seq_qual_from_group(read, aln_list):
+    """
+    If read has missing base qualities (QUAL='*'), copy SEQ+QUAL from any
+    other record in aln_list for the same cluster and same mate (read1/read2)
+    that still has them.
+
+    Does NOT touch tags (e.g., AS) so the promoted alignment keeps its AS.
+    """
+    if read.query_qualities is not None and read.query_sequence is not None:
+        return  # already has them
+
+    for a in aln_list:
+        if (a.is_read1 == read.is_read1) and (a.is_read2 == read.is_read2):
+            if a.query_qualities is not None and a.query_sequence is not None:
+                read.query_sequence  = a.query_sequence
+                read.query_qualities = a.query_qualities
+                return
 
 def is_valid_alignment(aln_pair, args, fa_dict):
     '''
@@ -167,6 +181,11 @@ def filter_read_group(aln_list, out, problem_reads, args, fa_dict, read_types, f
         if is_valid:
         # if best_score > args.thresh:
             read1, read2 = best_matching_alignment
+            
+            # restore SEQ/QUAL if the promoted record doesn't have QUALs
+            fill_seq_qual_from_group(read1, aln_list)
+            fill_seq_qual_from_group(read2, aln_list)
+
             # futz with mapping quality to make sure it doesn't get filtered out in the next step
             fix_read(read1, read2)
             fix_read(read2, read1)
@@ -282,6 +301,9 @@ def filter_contigs(bam_file, out, problem_reads, args):
         #             read_types['neither'] += 1
         #     else:
         #         read_types['neither'] += 1
+    
+    # Flush to process last group
+    read_types = filter_read_group(alignments_list, out, problem_reads, args, fa_dict, read_types, failure_modes)
 
     return read_types, failure_modes
 
