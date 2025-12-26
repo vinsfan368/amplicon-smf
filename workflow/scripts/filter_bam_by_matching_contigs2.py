@@ -111,23 +111,53 @@ def verify_alignment_bounds(aln_pair, fa_dict, perf_primer_len=30):
     else:
         return False
     
-def fill_seq_qual_from_group(read, aln_list):
+def restore_seq_qual_and_softclip(read, aln_list):
     """
-    If read has missing base qualities (QUAL='*'), copy SEQ+QUAL from any
-    other record in aln_list for the same cluster and same mate (read1/read2)
-    that still has them.
+    If read is missing SEQ/QUAL (QUAL='*'), copy SEQ+QUAL from the primary
+    alignment for the same mate (read1/read2) within aln_list.
 
-    Does NOT touch tags (e.g., AS) so the promoted alignment keeps its AS.
+    If we copied SEQ/QUAL and the primary had sequence information (i.e. we
+    truly recovered bases), convert terminal hard clips (H) in *this* read’s
+    CIGAR to soft clips (S) so CIGAR length is consistent with SEQ/QUAL.
+
+    Does NOT touch tags (e.g. AS), so promoted alignment keeps its AS.
     """
-    if read.query_qualities is not None and read.query_sequence is not None:
-        return  # already has them
+    # Only act if missing seq/qual
+    if read.query_sequence is not None and read.query_qualities is not None:
+        return
 
+    # Find primary donor for same mate with seq+qual
+    donor = None
     for a in aln_list:
-        if (a.is_read1 == read.is_read1) and (a.is_read2 == read.is_read2):
-            if a.query_qualities is not None and a.query_sequence is not None:
-                read.query_sequence  = a.query_sequence
-                read.query_qualities = a.query_qualities
-                return
+        if a.is_secondary:
+            continue
+        if a.is_read1 != read.is_read1 or a.is_read2 != read.is_read2:
+            continue
+        if a.query_sequence is not None and a.query_qualities is not None:
+            donor = a
+            break
+
+    if donor is None:
+        return
+
+    # Copy SEQ/QUAL
+    read.query_sequence = donor.query_sequence
+    read.query_qualities = donor.query_qualities
+
+    # If we restored bases, make CIGAR consistent by converting terminal H->S
+    c = read.cigartuples
+    if not c:
+        return
+    c = list(c)
+    changed = False
+    if c and c[0][0] == 5:   # H
+        c[0] = (4, c[0][1])  # S
+        changed = True
+    if c and c[-1][0] == 5:  # H
+        c[-1] = (4, c[-1][1])  # S
+        changed = True
+    if changed:
+        read.cigartuples = c
 
 def is_valid_alignment(aln_pair, args, fa_dict):
     '''
@@ -182,9 +212,10 @@ def filter_read_group(aln_list, out, problem_reads, args, fa_dict, read_types, f
         # if best_score > args.thresh:
             read1, read2 = best_matching_alignment
             
-            # restore SEQ/QUAL if the promoted record doesn't have QUALs
-            fill_seq_qual_from_group(read1, aln_list)
-            fill_seq_qual_from_group(read2, aln_list)
+            # If promoted secondary has no base quals, recover from
+            # primary and make CIGAR valid (H->S) if possible
+            restore_seq_qual_and_softclip(read1, aln_list)
+            restore_seq_qual_and_softclip(read2, aln_list)
 
             # futz with mapping quality to make sure it doesn't get filtered out in the next step
             fix_read(read1, read2)
