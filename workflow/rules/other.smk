@@ -297,34 +297,56 @@ rule amplicon_fa_to_peak_bed:
     shell:
         'python {params.script} {input} {output}'
 
-def get_c_type(wildcards):
-    if samplesheet.loc[wildcards.sample,'deaminase']:
+def get_c_context(wildcards):
+    """Return space-separated c_context list for merge_reads_make_matrices.py."""
+    if samplesheet.loc[wildcards.sample, 'deaminase']:
         return 'allC'
+    elif samplesheet.loc[wildcards.sample, 'include_cpg']:
+        return 'GC CG'
     else:
-        if samplesheet.loc[wildcards.sample,'include_cpg']:
-            return 'both_dimers'
-        else:
-            return 'GC'
+        return 'GC'
 
-rule join_reads_and_first_cluster:
+def get_dedup_method(wildcards):
+    """Map samplesheet dedup_on + c_context to a dedup_method arg."""
+    dedup_on = samplesheet.loc[wildcards.sample, 'dedup_on']
+    if dedup_on == 'allC':
+        return 'allC'
+    # 'c_type': derive from the c_context for this sample
+    if samplesheet.loc[wildcards.sample, 'deaminase']:
+        return 'allC'
+    elif samplesheet.loc[wildcards.sample, 'include_cpg']:
+        return 'both_dimers'
+    else:
+        return 'GC'
+
+rule make_conversion_matrices:
     input:
         bam='results/{experiment}/{sample}/{sample}.bwameth.filtered.sorted.bam',
-        fa='results/{experiment}/{sample}/tmp/{sample}.amplicon.revcomp.fa',
-        peaks='results/{experiment}/{sample}/tmp/{sample}.amplicon.revcomp.peaklist.bed'
+        fa='results/{experiment}/{sample}/tmp/{sample}.amplicon.revcomp.fa'
     output:
-        'results/{experiment}/{sample}/{sample}.amplicon_stats.txt'
+        stats='results/{experiment}/{sample}/{sample}.amplicon_stats.txt',
+        conversion_pdf='results/{experiment}/plots/{sample}.conversion_and_coverage.pdf',
+        sm_pdf='results/{experiment}/plots/{sample}.single_molecules.pdf'
     params:
-        prefix='results/{experiment}/{sample}/matrices/{sample}',
-        matdir='results/{experiment}/{sample}/matrices',
-        subset=1000,
-        ctype=get_c_type,
-        no_endog_meth=lambda wildcards: '-noEndogenousMethylation' if samplesheet.loc[wildcards.sample, 'no_endog_meth'] else '',
-        dedup_on=lambda wildcards: samplesheet.loc[wildcards.sample, 'dedup_on'],
-        script = os.path.join(SCRIPTS_DIR, "dSMF_footprints_clustering_py3.py")
+        matrix_prefix='results/{experiment}/{sample}/matrices/{sample}.',
+        c_context=get_c_context,
+        dedup_method=get_dedup_method,
+        unconv_frac=lambda wc: config.get('unconverted_frac', 0.85),
+        subsample=lambda wc: config.get('subsample', 1000),
+        invert=lambda wc: '--invert' if samplesheet.loc[wc.sample, 'deaminase'] else '',
+        script=os.path.join(SCRIPTS_DIR, "merge_reads_make_matrices.py")
     conda:
         os.path.join(ENV_DIR, "python3_v7.yaml")
     shell:
-        'mkdir -p {params.matdir}; python {params.script} {input.bam} {input.fa} {params.ctype} {input.peaks} 0 1 2 3 {params.prefix} {output} -label 0 -unstranded -subset {params.subset} {params.no_endog_meth} -cluster -heatmap --dedup_on {params.dedup_on}'
+        'mkdir -p results/{wildcards.experiment}/{wildcards.sample}/matrices; '
+        'python {params.script} {input.bam} {input.fa} {output.stats} {params.matrix_prefix} '
+        '--c_context {params.c_context} '
+        '--unconv_frac {params.unconv_frac} '
+        '--dedup_method {params.dedup_method} '
+        '--subsample {params.subsample} '
+        '--conversion_pdf {output.conversion_pdf} '
+        '--sm_pdf {output.sm_pdf} '
+        '{params.invert}'
 
 rule plot_bulk_methylation2:
     input:

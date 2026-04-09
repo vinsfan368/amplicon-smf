@@ -7,3 +7,5 @@ alignment_score_fraction: 0.8
 alignment_length_fraction: 0.8
 read1_length: 200
 read2_length: 200
+unconverted_frac: 0.001
+subsample: 1000

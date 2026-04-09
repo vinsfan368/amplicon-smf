@@ -50,6 +50,8 @@ def all_input(wildcards):
             wanted_input.append('results/{e}/plots/{s}.wasted_reads.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/{e}/{s}/{s}.amplicon_stats.txt'.format(e=experiment, s=sample))
         wanted_input.append('results/{e}/plots/{s}.nuc_len_qc_plots.pdf'.format(e=experiment, s=sample))
+        wanted_input.append('results/{e}/plots/{s}.conversion_and_coverage.pdf'.format(e=experiment, s=sample))
+        wanted_input.append('results/{e}/plots/{s}.single_molecules.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/qc/fastqc/fastqc.txt')
         # wanted_input.append('results/qc/fastqc/{}_fastqc.html'.format(path.basename(samplesheet.loc[sample,'fastq_R1']).replace('.fastq.gz','')))
         # wanted_input.append('results/qc/fastqc/{}_fastqc.html'.format(path.basename(samplesheet.loc[sample,'fastq_R2']).replace('.fastq.gz','')))
