@@ -1,61 +1,57 @@
-from snakemake.utils import validate
+import sys
 import pandas as pd
-from os import path
-# from Bio import SeqIO
 
-
-# # this container defines the underlying OS for each job when using the workflow
-# # with --use-conda --use-singularity
-# singularity: "docker://continuumio/miniconda3"
 
 ##### load config and sample sheets #####
 
-# configfile: "amplicon-smf/config/config.yaml"
-# validate(config, schema="../schemas/config.schema.yaml")
-
 samplesheet = pd.read_csv(config["samples"], sep="\t").set_index("sample_name", drop=False)
 
-# add back in the optional columns to the sample sheet, using defaults
-if 'filter_contigs' not in samplesheet.columns:
-    samplesheet['filter_contigs'] = True
+# Optional samplesheet columns with defaults
 if 'include_cpg' not in samplesheet.columns:
     samplesheet['include_cpg'] = False
-if 'no_endog_meth' not in samplesheet.columns:
-    samplesheet['no_endog_meth'] = False
-if 'ignore_bounds' not in samplesheet.columns:
-    samplesheet['ignore_bounds'] = False
-if 'read1_length' not in samplesheet.columns:
-    samplesheet['read1_length'] = config['read1_length']
-if 'read2_length' not in samplesheet.columns:
-    samplesheet['read2_length'] = config['read2_length']
-if 'bottom_strand' not in samplesheet.columns:
-    samplesheet['bottom_strand'] = True
 if 'deaminase' not in samplesheet.columns:
     samplesheet['deaminase'] = False
 if 'dedup_on' not in samplesheet.columns:
     samplesheet['dedup_on'] = 'c_type'
 
-# validate(samples, schema="../schemas/samples.schema.yaml")
+# Backwards-compatibility warnings: parameters from the bwameth-based pipeline
+# that are no longer used. The pipeline ignores them but warns so users know
+# their config/samplesheet has stale entries.
+_DEPRECATED_CONFIG_KEYS = {
+    'alignment_score_fraction': 'read alignment is now handled by bismark',
+    'alignment_length_fraction': 'read alignment is now handled by bismark',
+    'read1_length': 'read lengths are no longer needed; bismark handles alignment',
+    'read2_length': 'read lengths are no longer needed; bismark handles alignment',
+}
+for _key, _reason in _DEPRECATED_CONFIG_KEYS.items():
+    if _key in config:
+        print(f"WARNING: config key '{_key}' is no longer used ({_reason}). "
+              f"Remove it from your config file to silence this warning.",
+              file=sys.stderr)
+
+_DEPRECATED_SAMPLE_COLS = {
+    'filter_contigs': 'contig filtering is no longer performed',
+    'bottom_strand': 'strand orientation is handled by passing R2 as -1 to bismark',
+    'ignore_bounds': 'alignment bounds checking is no longer performed',
+    'no_endog_meth': 'endogenous methylation masking is now controlled via c_context',
+}
+for _col, _reason in _DEPRECATED_SAMPLE_COLS.items():
+    if _col in samplesheet.columns:
+        print(f"WARNING: samplesheet column '{_col}' is no longer used ({_reason}). "
+              f"Remove it from your samplesheet to silence this warning.",
+              file=sys.stderr)
+
 
 def all_input(wildcards):
     wanted_input = []
 
     for sample in samplesheet['sample_name']:
-        # amplicon_fa = samplesheet.loc[sample, 'amplicon_fa']
         experiment = samplesheet.loc[sample, 'experiment']
 
-        wanted_input.append('results/{e}/plots/{s}.bulk_plots.pdf'.format(e=experiment, s=sample))
-        wanted_input.append('results/{e}/plots/{s}.bulk_plots_from_matrices.pdf'.format(e=experiment, s=sample))
-        if True: #samplesheet.loc[sample, 'filter_contigs']:
-            wanted_input.append('results/{e}/plots/{s}.wasted_reads.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/{e}/{s}/{s}.amplicon_stats.txt'.format(e=experiment, s=sample))
-        wanted_input.append('results/{e}/plots/{s}.nuc_len_qc_plots.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/{e}/plots/{s}.conversion_and_coverage.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/{e}/plots/{s}.single_molecules.pdf'.format(e=experiment, s=sample))
+        wanted_input.append('results/{e}/plots/{s}.nuc_len_qc_plots.pdf'.format(e=experiment, s=sample))
         wanted_input.append('results/qc/fastqc/fastqc.txt')
-        # wanted_input.append('results/qc/fastqc/{}_fastqc.html'.format(path.basename(samplesheet.loc[sample,'fastq_R1']).replace('.fastq.gz','')))
-        # wanted_input.append('results/qc/fastqc/{}_fastqc.html'.format(path.basename(samplesheet.loc[sample,'fastq_R2']).replace('.fastq.gz','')))
-
-    # wanted_input.append('results/qc/fastqc/fastqc.txt')
 
     return wanted_input

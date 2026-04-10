@@ -49,6 +49,8 @@ def get_all_protection_streaks(methyls, positions):
     return sorted(streaks,key=lambda x: x[0],reverse=True)
 
 def fit_gmm_to_hist(data):
+    if len(data) < 2:
+        return None
     gm = GaussianMixture(n_components=2, random_state=0).fit(np.array(data).reshape(-1, 1))
     return gm
     
@@ -124,9 +126,10 @@ def plot_nucleosome_qc(input_prefix, amplicon_fa, plots, results, fit_gmm):
     plot_nuc_len_histogram(data, plots, title='All_Amplicons', gmm=gmm if fit_gmm else None)
 
     # write results
-    results.write('{}\t{:.0f}\n'.format('nuc_lower_mean_all', sorted(gmm.means_.flatten())[0]))
-    results.write('{}\t{:.0f}\n'.format('nuc_upper_mean_all', sorted(gmm.means_.flatten())[1]))
-    results.write('{}\t{:.2f}\n'.format('nuc_frac_in_lower_mode_all', np.mean(gmm.predict(np.array(data).reshape(-1, 1))==(0 if gmm.means_.flatten()[0] < gmm.means_.flatten()[1] else 1))))
+    if gmm is not None:
+        results.write('{}\t{:.0f}\n'.format('nuc_lower_mean_all', sorted(gmm.means_.flatten())[0]))
+        results.write('{}\t{:.0f}\n'.format('nuc_upper_mean_all', sorted(gmm.means_.flatten())[1]))
+        results.write('{}\t{:.2f}\n'.format('nuc_frac_in_lower_mode_all', np.mean(gmm.predict(np.array(data).reshape(-1, 1))==(0 if gmm.means_.flatten()[0] < gmm.means_.flatten()[1] else 1))))
 
     # do no tfbs
     no_tfbs = ['opJS4_0x_TetO_21bp_no_CG', 'opJS5_0xTetO_18bp_b1', 'opJS5_0xTetO_18bp_b2', 'BD24', 'no_TFBS', 'background']
@@ -137,7 +140,7 @@ def plot_nucleosome_qc(input_prefix, amplicon_fa, plots, results, fit_gmm):
             data = amplicon_to_nuc_len_dict[amplicon]
             gmm = fit_gmm_to_hist(data)
             plot_nuc_len_histogram(data, plots, title=amplicon, gmm=gmm if fit_gmm else None)
-            if len(data) > reads:
+            if gmm is not None and len(data) > reads:
                 reads = len(data)
                 lower_mean = sorted(gmm.means_.flatten())[0]
                 upper_mean = sorted(gmm.means_.flatten())[1]

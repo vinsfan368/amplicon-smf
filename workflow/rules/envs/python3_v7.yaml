@@ -5,10 +5,10 @@ channels:
   - bioconda
   - defaults
 dependencies:
+  - bismark
   - biopython
-  - bwa
+  - bowtie2
   - matplotlib
-  - methyldackel
   - numpy
   - pandas
   - pysam
@@ -17,5 +17,4 @@ dependencies:
   - scikit-learn
   - scipy
   - seaborn
-  - toolshed
   - fastqc

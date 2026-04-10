@@ -1,0 +1,6 @@
+nuc_lower_mean_all	114
+nuc_upper_mean_all	206
+nuc_frac_in_lower_mode_all	0.88
+nuc_lower_mean_best_0x	122
+nuc_upper_mean_best_0x	181
+nuc_frac_in_lower_mode_best_0x	0.87
